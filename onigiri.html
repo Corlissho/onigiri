@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飯糰俠 - 管理層營運儀表板 (護眼版)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Noto Sans HK"', 'sans-serif'] },
+                    colors: {
+                        // 護眼莫蘭迪色系 / 溫和風
+                        soft: {
+                            bg: '#F9F8F6',        // 暖白底色 (降低反光)
+                            card: '#FFFFFF',      // 卡片底色
+                            textMain: '#4A4F4B',  // 柔和深灰(進一步降低對比度，比純黑更護眼)
+                            textMuted: '#7A7F7A', // 柔和中灰
+                            border: '#EAE6DF',    // 柔和邊框
+                        },
+                        gentle: {
+                            green: '#84A59D',      // 莫蘭迪綠 (護眼主色)
+                            greenLight: '#F2F6F5', 
+                            orange: '#F28482',     // 莫蘭迪橘粉
+                            orangeLight: '#FDF3F2',
+                            blue: '#98C1D9',       // 莫蘭迪灰藍
+                            blueLight: '#F4F8FA',
+                            purple: '#B5A6C9',     // 莫蘭迪紫
+                            purpleLight: '#F7F5F9',
+                            highlight: '#FDE68A',  // 螢光筆黃色
+                            highlightText: '#92400E' // 螢光筆文字深色
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 基準字體保留原本的設定，透過 Tailwind class 控制內文大小 */
+        html { font-size: 14.25px; scroll-behavior: smooth; } 
+        body { background-color: #F9F8F6; color: #4A4F4B; line-height: 1.6; }
+        
+        .card { 
+            background-color: white; 
+            border-radius: 1.25rem; 
+            box-shadow: 0 4px 15px -3px rgba(0,0,0,0.03); 
+            border: 1px solid #EAE6DF; 
+            transition: transform 0.3s ease, box-shadow 0.3s ease; 
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
+        
+        /* 響應式圖表容器 */
+        .chart-container { position: relative; height: 260px; width: 100%; margin-top: 1rem; }
+        @media (min-width: 768px) { .chart-container { height: 320px; } }
+        
+        /* 高亮與重點標籤 (設定為精準 13.5px) */
+        .insight-tag { @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13.5px] font-bold bg-gentle-orangeLight text-gentle-orange border border-gentle-orange/30; }
+        
+        /* 升級版真實螢光筆效果 */
+        .highlight-mark { 
+            background: linear-gradient(to bottom, transparent 40%, rgba(253, 230, 138, 0.9) 40%);
+            color: #92400E;
+            padding: 0 0.2rem;
+            font-weight: 900;
+        }
+        
+        /* 隱藏未激活的 Tab */
+        .tab-content { display: none; animation: fadeIn 0.4s ease-in-out; }
+        .tab-content.active { display: block; }
+        
+        /* 隱藏原生滾動條，但保留滾動功能 (給 Tab 導航用) */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="antialiased p-4 sm:p-6 md:p-10 max-w-[1500px] mx-auto overflow-x-hidden">
+
+    <!-- 標題與操作區 (修復手機端換行適配) -->
+    <header class="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-5 bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-soft-border">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
+            <div class="bg-gentle-green text-white p-3 md:p-4 rounded-xl shadow-sm shrink-0">
+                <i data-lucide="pie-chart" class="w-7 h-7 md:w-8 md:h-8"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black text-soft-textMain tracking-tight">飯糰俠 管理層營運儀表板</h1>
+                <p class="text-[13.5px] text-soft-textMuted mt-1">數據區間：2026年 1月 - 2月</p>
+            </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+            <button class="w-full sm:w-auto justify-center bg-white border-2 border-soft-border text-soft-textMain px-4 py-2.5 rounded-xl text-[13.5px] md:text-base font-bold hover:bg-soft-bg transition flex items-center gap-2">
+                <i data-lucide="calendar" class="w-4 h-4 md:w-5 md:h-5 text-gentle-green"></i> 選擇日期
+            </button>
+            <button class="w-full sm:w-auto justify-center bg-gentle-green text-white px-4 py-2.5 rounded-xl text-[13.5px] md:text-base font-bold hover:bg-opacity-90 transition shadow-sm flex items-center gap-2">
+                <i data-lucide="download" class="w-4 h-4 md:w-5 md:h-5"></i> 匯出 PDF 報告
+            </button>
+        </div>
+    </header>
+
+    <!-- 導航分頁菜單 (Tabs) - 修復響應式橫向滾動 -->
+    <div class="mb-8 border-b-2 border-soft-border overflow-x-auto no-scrollbar">
+        <nav class="flex space-x-6 md:space-x-10 min-w-max px-1" aria-label="Tabs">
+            <button onclick="switchTab('tab-overview')" id="btn-tab-overview" class="tab-btn border-gentle-green text-gentle-green whitespace-nowrap py-4 px-2 border-b-4 font-black text-lg md:text-xl transition-colors flex items-center gap-2">
+                <i data-lucide="layout-dashboard" class="w-5 h-5 md:w-6 md:h-6"></i> 營運總覽
+            </button>
+            <button onclick="switchTab('tab-sales')" id="btn-tab-sales" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain hover:border-soft-border whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg md:text-xl transition-colors flex items-center gap-2">
+                <i data-lucide="store" class="w-5 h-5 md:w-6 md:h-6"></i> 分店與銷售分析
+            </button>
+            <button onclick="switchTab('tab-customer')" id="btn-tab-customer" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain hover:border-soft-border whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg md:text-xl transition-colors flex items-center gap-2">
+                <i data-lucide="users" class="w-5 h-5 md:w-6 md:h-6"></i> 客群與環境分析
+            </button>
+            <button onclick="switchTab('tab-strategy')" id="btn-tab-strategy" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain hover:border-soft-border whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg md:text-xl transition-colors flex items-center gap-2">
+                <i data-lucide="target" class="w-5 h-5 md:w-6 md:h-6"></i> 行動策略
+            </button>
+        </nav>
+    </div>
+
+    <!-- 內容區域 -->
+    <main>
+        <!-- 子頁面 1: 營運總覽 -->
+        <div id="tab-overview" class="tab-content active">
+            
+            <!-- 管理層摘要 (Executive Summary) -->
+            <div class="bg-gentle-greenLight border border-gentle-green/30 p-6 md:p-8 rounded-2xl mb-8">
+                <h3 class="font-black text-gentle-green text-xl md:text-2xl flex items-center gap-3 mb-4">
+                    <i data-lucide="clipboard-list" class="w-6 h-6 md:w-7 md:h-7"></i> 管理層摘要 (Executive Summary)
+                </h3>
+                <p class="text-[13.5px] text-soft-textMain leading-relaxed md:leading-loose">
+                    本期整體營收 <span class="highlight-mark">成長強勁（+12.5%）</span>，主要由 <span class="highlight-mark">外賣業務（佔比 68%）</span> 及核心商務區分店帶動。數據顯示出兩大優化空間：
+                    <br class="hidden md:block"><br class="hidden md:block">
+                    <span class="block mt-2 md:inline md:mt-0">(1) <span class="highlight-mark">旺角店單量全線第一，但客單價偏低</span>，具備極大提價與產品組合優化潛力；</span>
+                    <span class="block mt-2 md:inline md:mt-0">(2) 門市結帳效率受限於現金支付，需加速推行 <span class="highlight-mark">電子錢包與自助點餐機</span> 以提升翻檯率。</span>
+                </p>
+            </div>
+
+            <!-- 核心 KPIs - 修復小螢幕折行問題 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+                <div class="card p-5 md:p-7 border-t-8 border-t-gentle-green flex flex-col justify-center">
+                    <p class="text-[13.5px] text-soft-textMuted font-bold mb-1 md:mb-2">總營業額 (Revenue)</p>
+                    <h3 class="text-3xl md:text-4xl xl:text-5xl font-black text-soft-textMain mb-2 md:mb-3">HK$ 184,520</h3>
+                    <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="trending-up" class="w-4 h-4 md:w-5 md:h-5"></i> +12.5% vs 上期</p>
+                </div>
+                <div class="card p-5 md:p-7 border-t-8 border-t-gentle-blue flex flex-col justify-center">
+                    <p class="text-[13.5px] text-soft-textMuted font-bold mb-1 md:mb-2">總訂單數 (Orders)</p>
+                    <h3 class="text-3xl md:text-4xl xl:text-5xl font-black text-soft-textMain mb-2 md:mb-3">2,562 <span class="text-lg md:text-xl font-normal text-soft-textMuted">單</span></h3>
+                    <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="trending-up" class="w-4 h-4 md:w-5 md:h-5"></i> +8.2% vs 上期</p>
+                </div>
+                <div class="card p-5 md:p-7 border-t-8 border-t-gentle-orange flex flex-col justify-center">
+                    <p class="text-[13.5px] text-soft-textMuted font-bold mb-1 md:mb-2">平均客單價 (AOV)</p>
+                    <h3 class="text-3xl md:text-4xl xl:text-5xl font-black text-soft-textMain mb-2 md:mb-3">HK$ 72.0</h3>
+                    <p class="text-[13.5px] text-soft-textMuted mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="minus" class="w-4 h-4 md:w-5 md:h-5"></i> 持平穩定</p>
+                </div>
+                <div class="card p-5 md:p-7 border-t-8 border-t-gentle-purple flex flex-col justify-center">
+                    <p class="text-[13.5px] text-soft-textMuted font-bold mb-1 md:mb-2">外賣佔比 (Takeaway)</p>
+                    <h3 class="text-3xl md:text-4xl xl:text-5xl font-black text-soft-textMain mb-2 md:mb-3"><span class="highlight-mark text-3xl md:text-4xl">68%</span></h3>
+                    <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="trending-up" class="w-4 h-4 md:w-5 md:h-5"></i> 表現優於預期</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 子頁面 2: 分店與銷售分析 -->
+        <div id="tab-sales" class="tab-content">
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
+                <!-- 圖表：分店表現 -->
+                <div class="card p-5 md:p-8 flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 md:mb-6 gap-3 md:gap-4">
+                        <h2 class="text-xl md:text-2xl font-black flex items-center gap-2 md:gap-3 text-soft-textMain">
+                            <i data-lucide="bar-chart-2" class="text-gentle-green w-6 h-6 md:w-7 md:h-7 shrink-0"></i> 分店營收與單量分佈
+                        </h2>
+                        <span class="insight-tag self-start">旺角店單量居冠，具提價潛力</span>
+                    </div>
+                    <p class="text-[13.5px] text-soft-textMuted mb-2">商務區貢獻最高營收；<span class="highlight-mark">旺角店客流第一，但每單消費偏低</span>，拉低整體客單價。</p>
+                    <div class="chart-container">
+                        <canvas id="storeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 圖表：外賣與堂食 (修復圖表與文字並排在手機端擠壓問題) -->
+                <div class="card p-5 md:p-8 flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 md:mb-6 gap-3 md:gap-4">
+                        <h2 class="text-xl md:text-2xl font-black flex items-center gap-2 md:gap-3 text-soft-textMain">
+                            <i data-lucide="shopping-bag" class="text-gentle-orange w-6 h-6 md:w-7 md:h-7 shrink-0"></i> 外賣 vs 堂食 佔比
+                        </h2>
+                        <span class="insight-tag self-start">外賣佔比高達 68%</span>
+                    </div>
+                    <p class="text-[13.5px] text-soft-textMuted mb-4">外賣模式不僅佔七成訂單，其平均客單價 <span class="highlight-mark font-black">($75.4)</span> 亦高於堂食 ($64.2)。</p>
+                    <div class="flex flex-col md:flex-row items-center justify-between flex-1 gap-6 md:gap-8 mt-2">
+                        <div class="w-full md:w-1/2 relative h-[220px] md:h-[260px]">
+                            <canvas id="dineInTakeoutChart"></canvas>
+                        </div>
+                        <div class="w-full md:w-1/2 flex flex-row md:flex-col gap-4 md:space-y-6">
+                            <div class="flex-1 bg-gentle-greenLight p-4 md:p-6 rounded-2xl border border-gentle-green/20 text-center md:text-left">
+                                <p class="text-[13.5px] text-gentle-green font-bold mb-1">外賣平均客單價</p>
+                                <p class="text-3xl md:text-4xl font-black text-soft-textMain">$75.4</p>
+                            </div>
+                            <div class="flex-1 bg-soft-bg p-4 md:p-6 rounded-2xl border border-soft-border text-center md:text-left">
+                                <p class="text-[13.5px] text-soft-textMuted font-bold mb-1">堂食平均客單價</p>
+                                <p class="text-2xl md:text-3xl font-black text-soft-textMain">$64.2</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 子頁面 3: 客群與環境分析 -->
+        <div id="tab-customer" class="tab-content">
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
+                <!-- 圖表：付款方式 -->
+                <div class="card p-5 md:p-8 flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 md:mb-6 gap-3 md:gap-4">
+                        <h2 class="text-xl md:text-2xl font-black flex items-center gap-2 md:gap-3 text-soft-textMain">
+                            <i data-lucide="wallet" class="text-gentle-blue w-6 h-6 md:w-7 md:h-7 shrink-0"></i> 顧客年齡層與支付偏好
+                        </h2>
+                        <span class="insight-tag bg-gentle-blueLight text-gentle-blue border-gentle-blue/30 self-start">年輕客群依賴電子支付</span>
+                    </div>
+                    <p class="text-[13.5px] text-soft-textMuted mb-2">學生近全數使用八達通；上班族為 PayMe/Alipay 主力。而 <span class="highlight-mark">46歲以上仍有 30% 現金結帳</span>。</p>
+                    <div class="chart-container">
+                        <canvas id="paymentChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 圖表：天氣影響 -->
+                <div class="card p-5 md:p-8 flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 md:mb-6 gap-3 md:gap-4">
+                        <h2 class="text-xl md:text-2xl font-black flex items-center gap-2 md:gap-3 text-soft-textMain">
+                            <i data-lucide="cloud-rain" class="text-gentle-purple w-6 h-6 md:w-7 md:h-7 shrink-0"></i> 天氣因素對銷量影響
+                        </h2>
+                        <span class="insight-tag bg-gentle-purpleLight text-gentle-purple border-gentle-purple/30 self-start">雨天熱食需求大增</span>
+                    </div>
+                    <p class="text-[13.5px] text-soft-textMuted mb-2">雨天門市客流微幅下滑，但 <span class="highlight-mark">「熱飲與湯品」銷量逆勢成長 45%</span>，彌補主食缺口。</p>
+                    <div class="chart-container">
+                        <canvas id="weatherChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 子頁面 4: 行動策略 -->
+        <div id="tab-strategy" class="tab-content">
+            <h2 class="text-2xl md:text-3xl font-black mb-6 md:mb-8 flex items-center gap-3 text-soft-textMain">
+                <i data-lucide="rocket" class="text-gentle-green w-7 h-7 md:w-8 md:h-8"></i> 數據驅動之行動策略建議
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+                
+                <div class="card border-t-8 border-t-gentle-green hover:-translate-y-2 transition-transform h-full">
+                    <div class="p-6 md:p-8 flex flex-col h-full">
+                        <div class="w-14 h-14 md:w-16 md:h-16 bg-gentle-greenLight text-gentle-green rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+                            <i data-lucide="store" class="w-7 h-7 md:w-8 md:h-8"></i>
+                        </div>
+                        <h3 class="font-black text-xl md:text-2xl mb-3 md:mb-4 text-soft-textMain">1. 旺角店專屬產品優化</h3>
+                        <p class="text-[13.5px] text-soft-textMuted leading-relaxed flex-grow">
+                            針對旺角店客流極高但客單價低的問題，強烈建議推出 <span class="highlight-mark">「雙拼迷你飯糰 + 輕食飲品」組合餐</span>，以提高單筆消費額，將客流轉化為實際營收。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card border-t-8 border-t-gentle-blue hover:-translate-y-2 transition-transform h-full">
+                    <div class="p-6 md:p-8 flex flex-col h-full">
+                        <div class="w-14 h-14 md:w-16 md:h-16 bg-gentle-blueLight text-gentle-blue rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+                            <i data-lucide="smartphone-nfc" class="w-7 h-7 md:w-8 md:h-8"></i>
+                        </div>
+                        <h3 class="font-black text-xl md:text-2xl mb-3 md:mb-4 text-soft-textMain">2. 全線推進自助電子支付</h3>
+                        <p class="text-[13.5px] text-soft-textMuted leading-relaxed flex-grow">
+                            為降低現金處理時間並提升翻檯率，建議在各分店引入 <span class="highlight-mark">「自助點餐機 (Kiosk)」</span>，並提供「電子支付立減 $3」誘因，加速結帳流程。
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card border-t-8 border-t-gentle-orange hover:-translate-y-2 transition-transform h-full">
+                    <div class="p-6 md:p-8 flex flex-col h-full">
+                        <div class="w-14 h-14 md:w-16 md:h-16 bg-gentle-orangeLight text-gentle-orange rounded-2xl flex items-center justify-center mb-5 md:mb-6">
+                            <i data-lucide="cloud-lightning" class="w-7 h-7 md:w-8 md:h-8"></i>
+                        </div>
+                        <h3 class="font-black text-xl md:text-2xl mb-3 md:mb-4 text-soft-textMain">3. 部署天氣動態行銷</h3>
+                        <p class="text-[13.5px] text-soft-textMuted leading-relaxed flex-grow">
+                            把握雨天顧客對熱食的強烈需求，授權前線經理在雨天時啟動 <span class="highlight-mark">「暖胃套餐（飯糰+熱湯）」</span> 促銷，同步增加外賣平台曝光度。
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 腳本 -->
+    <script>
+        lucide.createIcons();
+        
+        // 圖表全局設置 (進階調校莫蘭迪護眼色配置)
+        Chart.defaults.font.family = '"Noto Sans HK", sans-serif';
+        Chart.defaults.font.size = 12.5; 
+        Chart.defaults.color = '#7A7F7A'; // 更加溫和的軸線文字色
+
+        // 全面套用更溫和、低飽和度的莫蘭迪色系
+        const colors = {
+            green: '#84A59D',
+            orange: '#F28482',
+            blue: '#98C1D9',
+            purple: '#B5A6C9',
+            gray: '#D1D5D2' // 暖灰色
+        };
+
+        // 頁籤切換邏輯
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-gentle-green', 'text-gentle-green', 'font-black');
+                btn.classList.add('border-transparent', 'text-soft-textMuted', 'font-bold');
+            });
+
+            document.getElementById(tabId).classList.add('active');
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.remove('border-transparent', 'text-soft-textMuted', 'font-bold');
+            activeBtn.classList.add('border-gentle-green', 'text-gentle-green', 'font-black');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // 1. 分店營收與單量分佈
+            new Chart(document.getElementById('storeChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['銅鑼灣店', '觀塘店', '旺角店', '沙田店', '將軍澳店', '荃灣店'],
+                    datasets: [
+                        { label: '營業額 (HKD)', data: [45120, 41360, 38210, 25320, 20150, 14360], backgroundColor: colors.green, borderRadius: 6, yAxisID: 'y' },
+                        { label: '單量 (單)', data: [510, 490, 620, 350, 310, 282], type: 'line', borderColor: colors.orange, backgroundColor: colors.orange, borderWidth: 3, pointRadius: 5, tension: 0.3, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { type: 'linear', position: 'left', title: { display: true, text: '營業額 ($)' } },
+                        y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '單量' } }
+                    }
+                }
+            });
+
+            // 2. 外賣與堂食佔比
+            new Chart(document.getElementById('dineInTakeoutChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['外賣 (Takeaway)', '堂食 (Dine-in)'],
+                    datasets: [{ data: [68, 32], backgroundColor: [colors.green, colors.gray], borderWidth: 0, hoverOffset: 6 }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, cutout: '70%', 
+                    plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { size: 13.5 } } } } 
+                }
+            });
+
+            // 3. 付款方式與客群
+            new Chart(document.getElementById('paymentChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['學生', '18-25歲', '26-35歲', '36-45歲', '46歲以上'],
+                    datasets: [
+                        { label: '八達通', data: [85, 40, 25, 30, 35], backgroundColor: colors.green },
+                        { label: 'PayMe / Alipay', data: [5, 45, 50, 30, 10], backgroundColor: colors.blue },
+                        { label: '現金/信用卡', data: [10, 15, 25, 40, 55], backgroundColor: colors.gray }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '使用佔比 (%)' } } }
+                }
+            });
+
+            // 4. 天氣影響
+            new Chart(document.getElementById('weatherChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['晴天(平日)', '雨天(平日)', '晴天(週末)', '雨天(週末)'],
+                    datasets: [
+                        { label: '主食(飯糰) 銷量', data: [850, 720, 320, 250], backgroundColor: colors.gray, borderRadius: 6 },
+                        { label: '熱飲/湯品 銷量', data: [210, 450, 90, 180], backgroundColor: colors.orange, borderRadius: 6 }
+                    ]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { y: { title: { display: true, text: '售出數量' } } } 
+                }
+            });
+        });
+    </script>
+</body>
+</html>
