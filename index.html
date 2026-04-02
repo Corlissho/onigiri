@@ -12,8 +12,6 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- html2pdf.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <script>
         tailwind.config = {
@@ -44,15 +42,6 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* PDF 匯出與列印專屬樣式 */
-        @media print {
-            .no-print { display: none !important; }
-            body, #report-content { background-color: white; padding: 0 !important; }
-            .card { box-shadow: none !important; border: 1px solid #EAE6DF !important; break-inside: avoid; }
-            .tab-content { display: block !important; margin-bottom: 2rem; page-break-inside: avoid; }
-            .chart-container { height: 250px !important; }
-        }
     </style>
 </head>
 <body class="antialiased p-4 sm:p-6 md:p-10 max-w-[1500px] mx-auto overflow-x-hidden">
@@ -71,8 +60,8 @@
         </div>
     </div>
 
-    <!-- 頂部操作列 (匯出 PDF 時不顯示) -->
-    <div class="no-print flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 bg-soft-bg border border-soft-border p-4 rounded-xl shadow-sm">
+    <!-- 頂部操作列 -->
+    <div class="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 bg-soft-bg border border-soft-border p-4 rounded-xl shadow-sm">
         <div class="flex items-center gap-3">
             <i data-lucide="filter" class="w-5 h-5 text-gentle-green"></i>
             <span class="text-[13.5px] font-bold text-soft-textMain">選擇真實數據區間：</span>
@@ -86,13 +75,10 @@
             <button id="update-btn" onclick="applyDateFilter()" class="w-full sm:w-auto bg-white border-2 border-gentle-green text-gentle-green px-5 py-2.5 rounded-xl text-[13.5px] font-bold hover:bg-gentle-greenLight transition flex items-center justify-center gap-2 shadow-sm">
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i> 更新運算
             </button>
-            <button id="pdf-btn" onclick="exportToPDF()" class="w-full sm:w-auto bg-gentle-green text-white px-5 py-2.5 rounded-xl text-[13.5px] font-bold hover:bg-opacity-90 transition shadow-sm flex items-center justify-center gap-2">
-                <i data-lucide="download" class="w-4 h-4"></i> 匯出 PDF 報告
-            </button>
         </div>
     </div>
 
-    <!-- 報表主體 (將被匯出為 PDF 的範圍) -->
+    <!-- 報表主體 -->
     <div id="report-content" class="bg-transparent md:bg-white md:p-4 rounded-2xl mx-auto">
         
         <header class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 mb-8 p-2 md:p-4 border-b md:border-none border-soft-border">
@@ -106,7 +92,7 @@
         </header>
 
         <!-- 導航分頁菜單 -->
-        <div class="mb-8 border-b-2 border-soft-border overflow-x-auto no-scrollbar no-print px-2 md:px-4">
+        <div class="mb-8 border-b-2 border-soft-border overflow-x-auto no-scrollbar px-2 md:px-4">
             <nav class="flex space-x-6 md:space-x-10 min-w-max" aria-label="Tabs">
                 <button onclick="switchTab('tab-overview')" id="btn-tab-overview" class="tab-btn border-gentle-green text-gentle-green whitespace-nowrap py-4 px-2 border-b-4 font-black text-lg transition-colors flex items-center gap-2"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> 營運總覽</button>
                 <button onclick="switchTab('tab-sales')" id="btn-tab-sales" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg transition-colors flex items-center gap-2"><i data-lucide="store" class="w-5 h-5"></i> 分店與銷售</button>
@@ -344,76 +330,6 @@
             btn.classList.add('bg-gentle-greenLight');
             lucide.createIcons();
             setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('bg-gentle-greenLight'); lucide.createIcons(); }, 1500);
-        }
-
-        // ====== 3. 完美比例 PDF 匯出系統 (修復右側裁切) ======
-        function exportToPDF() {
-            const btn = document.getElementById('pdf-btn');
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin inline"></i> 正在生成 PDF...`;
-            lucide.createIcons();
-
-            // 匯出前：強制展開所有分頁
-            const tabs = document.querySelectorAll('.tab-content');
-            tabs.forEach(el => { el.classList.add('active'); el.style.display = 'block'; });
-
-            const element = document.getElementById('report-content');
-            
-            // 【修復關鍵】：強制將報表鎖定為 1200px 的電腦版佈局寬度
-            const originalWidth = element.style.width;
-            const originalMaxWidth = element.style.maxWidth;
-            element.style.width = '1200px';
-            element.style.maxWidth = '1200px';
-            
-            const opt = {
-                margin:       [0.3, 0.3, 0.3, 0.3], // 上, 左, 下, 右
-                filename:     `飯糰俠_營運報表_${document.getElementById('startDate').value}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { 
-                    scale: 2, 
-                    useCORS: true, 
-                    logging: false,
-                    // 【修復關鍵】：強制畫布大小與網頁等寬
-                    windowWidth: 1200,
-                    width: 1200
-                },
-                // 【修復關鍵】：將 A4 方向改為橫向 (landscape)，最適合儀表板
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
-            };
-
-            if (typeof html2pdf !== 'undefined') {
-                html2pdf().set(opt).from(element).save().then(() => {
-                    // 恢復原有寬度與 UI 狀態
-                    element.style.width = originalWidth;
-                    element.style.maxWidth = originalMaxWidth;
-                    restoreAfterPDF(btn, originalContent);
-                    showModal('PDF 橫向報表已成功下載！');
-                }).catch(err => {
-                    console.error("html2pdf error:", err);
-                    element.style.width = originalWidth;
-                    element.style.maxWidth = originalMaxWidth;
-                    triggerNativePrintFallback(btn, originalContent);
-                });
-            } else {
-                element.style.width = originalWidth;
-                element.style.maxWidth = originalMaxWidth;
-                triggerNativePrintFallback(btn, originalContent);
-            }
-        }
-
-        function triggerNativePrintFallback(btn, originalContent) {
-            showModal('因環境安全性限制，已為您無縫切換至「原生高畫質列印模式」。\n請在接下來彈出的視窗中，目標選擇「另存為 PDF」。');
-            setTimeout(() => {
-                window.print();
-                restoreAfterPDF(btn, originalContent);
-            }, 2500);
-        }
-
-        function restoreAfterPDF(btn, originalContent) {
-            document.querySelectorAll('.tab-content').forEach(el => el.style.display = ''); // 移除 inline 樣式
-            switchTab('tab-overview');
-            btn.innerHTML = originalContent;
-            lucide.createIcons();
         }
 
         // 初始化圖表與初次數據載入
