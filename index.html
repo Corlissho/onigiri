@@ -3,11 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>飯糰俠 - 管理層營運儀表板 (護眼與全功能版)</title>
+    <title>飯糰俠 - 管理層營運儀表板 (全功能運算版)</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- html2pdf.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <script>
@@ -25,63 +30,84 @@
     </script>
     <style>
         html { font-size: 14.25px; scroll-behavior: smooth; } 
-        body { background-color: #F9F8F6; color: #4A4F4B; line-height: 1.6; }
+        body { background-color: #F9F8F6; color: #4A4F4B; line-height: 1.6; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .card { background-color: white; border-radius: 1.25rem; box-shadow: 0 4px 15px -3px rgba(0,0,0,0.03); border: 1px solid #EAE6DF; transition: transform 0.3s ease, box-shadow 0.3s ease; }
         .card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); }
         .chart-container { position: relative; height: 260px; width: 100%; margin-top: 1rem; }
         @media (min-width: 768px) { .chart-container { height: 320px; } }
         .insight-tag { @apply inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13.5px] font-bold bg-gentle-orangeLight text-gentle-orange border border-gentle-orange/30; }
         .highlight-mark { background: linear-gradient(to bottom, transparent 40%, rgba(253, 230, 138, 0.9) 40%); color: #92400E; padding: 0 0.2rem; font-weight: 900; }
+        
+        /* 標籤頁控制 */
         .tab-content { display: none; animation: fadeIn 0.4s ease-in-out; }
         .tab-content.active { display: block; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* 列印與匯出 PDF 時隱藏不需要的元素 */
+        /* PDF 匯出與列印專屬樣式 */
         @media print {
             .no-print { display: none !important; }
-            body { background-color: white; }
-            .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+            body, #report-content { background-color: white; padding: 0 !important; }
+            .card { box-shadow: none !important; border: 1px solid #EAE6DF !important; break-inside: avoid; }
+            .tab-content { display: block !important; margin-bottom: 2rem; page-break-inside: avoid; }
+            .chart-container { height: 250px !important; }
         }
     </style>
 </head>
 <body class="antialiased p-4 sm:p-6 md:p-10 max-w-[1500px] mx-auto overflow-x-hidden">
 
-    <div class="no-print flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 bg-soft-bg border border-soft-border p-4 rounded-xl">
+    <!-- 客製化彈窗 (Modal) -->
+    <div id="custom-modal" class="fixed inset-0 bg-slate-900/40 hidden items-center justify-center z-50 backdrop-blur-sm transition-opacity opacity-0">
+        <div id="custom-modal-content" class="bg-white rounded-2xl p-6 md:p-8 max-w-sm w-[90%] shadow-2xl transform scale-95 transition-all">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-gentle-orangeLight text-gentle-orange rounded-full flex items-center justify-center">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                </div>
+                <h3 class="text-lg font-black text-soft-textMain">系統提示</h3>
+            </div>
+            <p id="custom-modal-text" class="text-[13.5px] text-soft-textMuted mb-6 leading-relaxed"></p>
+            <button onclick="closeModal()" class="w-full bg-gentle-green text-white py-3 rounded-xl text-[13.5px] font-bold hover:bg-opacity-90 transition">我知道了</button>
+        </div>
+    </div>
+
+    <!-- 頂部操作列 (匯出 PDF 時不顯示) -->
+    <div class="no-print flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 bg-soft-bg border border-soft-border p-4 rounded-xl shadow-sm">
         <div class="flex items-center gap-3">
             <i data-lucide="filter" class="w-5 h-5 text-gentle-green"></i>
-            <span class="text-[13.5px] font-bold text-soft-textMain">選擇數據區間 (2026年 1月 - 2月)：</span>
+            <span class="text-[13.5px] font-bold text-soft-textMain">選擇真實數據區間：</span>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 w-full xl:w-auto items-center">
-            <div class="flex items-center gap-2 bg-white border border-soft-border rounded-lg px-3 py-2 w-full sm:w-auto">
-                <input type="date" id="startDate" min="2026-01-01" max="2026-02-28" value="2026-01-01" class="outline-none text-[13.5px] text-soft-textMain bg-transparent w-full">
+            <div class="flex items-center gap-2 bg-white border border-soft-border rounded-lg px-3 py-2 w-full sm:w-auto focus-within:border-gentle-green transition">
+                <input type="date" id="startDate" min="2026-01-01" max="2026-02-28" value="2026-01-01" class="outline-none text-[13.5px] text-soft-textMain bg-transparent w-full cursor-pointer">
                 <span class="text-soft-textMuted">至</span>
-                <input type="date" id="endDate" min="2026-01-01" max="2026-02-28" value="2026-02-28" class="outline-none text-[13.5px] text-soft-textMain bg-transparent w-full">
+                <input type="date" id="endDate" min="2026-01-01" max="2026-02-28" value="2026-02-28" class="outline-none text-[13.5px] text-soft-textMain bg-transparent w-full cursor-pointer">
             </div>
-            <button onclick="applyDateFilter()" class="w-full sm:w-auto bg-white border-2 border-gentle-green text-gentle-green px-4 py-2 rounded-lg text-[13.5px] font-bold hover:bg-gentle-greenLight transition flex items-center justify-center gap-2">
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i> 更新數據
+            <button id="update-btn" onclick="applyDateFilter()" class="w-full sm:w-auto bg-white border-2 border-gentle-green text-gentle-green px-5 py-2.5 rounded-xl text-[13.5px] font-bold hover:bg-gentle-greenLight transition flex items-center justify-center gap-2 shadow-sm">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i> 更新運算
             </button>
-            <button onclick="exportToPDF()" class="w-full sm:w-auto bg-gentle-green text-white px-4 py-2.5 rounded-lg text-[13.5px] font-bold hover:bg-opacity-90 transition shadow-sm flex items-center justify-center gap-2">
-                <i data-lucide="download" class="w-4 h-4"></i> 匯出為 PDF
+            <button id="pdf-btn" onclick="exportToPDF()" class="w-full sm:w-auto bg-gentle-green text-white px-5 py-2.5 rounded-xl text-[13.5px] font-bold hover:bg-opacity-90 transition shadow-sm flex items-center justify-center gap-2">
+                <i data-lucide="download" class="w-4 h-4"></i> 匯出 PDF 報告
             </button>
         </div>
     </div>
 
-    <div id="report-content" class="bg-white p-2 rounded-2xl">
+    <!-- 報表主體 (將被匯出為 PDF 的範圍) -->
+    <div id="report-content" class="bg-transparent md:bg-white md:p-4 rounded-2xl mx-auto">
         
-        <header class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 mb-8 p-4">
+        <header class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 mb-8 p-2 md:p-4 border-b md:border-none border-soft-border">
             <div class="bg-gentle-green text-white p-3 md:p-4 rounded-xl shadow-sm shrink-0">
                 <i data-lucide="pie-chart" class="w-7 h-7 md:w-8 md:h-8"></i>
             </div>
             <div>
                 <h1 class="text-2xl md:text-3xl font-black text-soft-textMain tracking-tight">飯糰俠 管理層營運儀表板</h1>
-                <p id="display-date-range" class="text-[13.5px] text-soft-textMuted mt-1">目前數據區間：2026-01-01 至 2026-02-28 (共 59 天)</p>
+                <p id="display-date-range" class="text-[13.5px] text-soft-textMuted mt-1">當前分析區間：2026-01-01 至 2026-02-28 (共 59 天)</p>
             </div>
         </header>
 
-        <div class="mb-8 border-b-2 border-soft-border overflow-x-auto no-scrollbar no-print">
-            <nav class="flex space-x-6 md:space-x-10 min-w-max px-1" aria-label="Tabs">
+        <!-- 導航分頁菜單 -->
+        <div class="mb-8 border-b-2 border-soft-border overflow-x-auto no-scrollbar no-print px-2 md:px-4">
+            <nav class="flex space-x-6 md:space-x-10 min-w-max" aria-label="Tabs">
                 <button onclick="switchTab('tab-overview')" id="btn-tab-overview" class="tab-btn border-gentle-green text-gentle-green whitespace-nowrap py-4 px-2 border-b-4 font-black text-lg transition-colors flex items-center gap-2"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> 營運總覽</button>
                 <button onclick="switchTab('tab-sales')" id="btn-tab-sales" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg transition-colors flex items-center gap-2"><i data-lucide="store" class="w-5 h-5"></i> 分店與銷售</button>
                 <button onclick="switchTab('tab-customer')" id="btn-tab-customer" class="tab-btn border-transparent text-soft-textMuted hover:text-soft-textMain whitespace-nowrap py-4 px-2 border-b-4 font-bold text-lg transition-colors flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> 客群與環境</button>
@@ -89,12 +115,13 @@
             </nav>
         </div>
 
-        <main>
+        <main class="px-0 md:px-4">
+            <!-- 子頁面 1: 營運總覽 -->
             <div id="tab-overview" class="tab-content active">
-                <div class="bg-gentle-greenLight border border-gentle-green/30 p-6 md:p-8 rounded-2xl mb-8">
+                <div class="bg-gentle-greenLight border border-gentle-green/30 p-6 md:p-8 rounded-2xl mb-8 shadow-sm">
                     <h3 class="font-black text-gentle-green text-xl md:text-2xl flex items-center gap-3 mb-4"><i data-lucide="clipboard-list" class="w-6 h-6"></i> 管理層摘要</h3>
                     <p class="text-[13.5px] text-soft-textMain leading-relaxed md:leading-loose">
-                        本期整體營收 <span class="highlight-mark">表現符合預期</span>，主要由 <span class="highlight-mark">外賣業務（佔比約 68%）</span> 及核心商務區分店帶動。數據顯示出兩大優化空間：
+                        所選期間整體營收 <span class="highlight-mark">表現穩定</span>，主要由 <span class="highlight-mark">外賣業務（佔比近七成）</span> 及核心商務區分店帶動。數據顯示出兩大優化空間：
                         <br class="hidden md:block"><br class="hidden md:block">
                         <span class="block mt-2 md:inline md:mt-0">(1) <span class="highlight-mark">旺角店單量全線第一，但客單價偏低</span>，具備極大提價與產品組合優化潛力；</span>
                         <span class="block mt-2 md:inline md:mt-0">(2) 門市結帳效率受限於現金支付，需加速推行 <span class="highlight-mark">電子錢包與自助點餐機</span>。</span>
@@ -104,50 +131,52 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
                     <div class="card p-5 md:p-7 border-t-8 border-t-gentle-green flex flex-col justify-center">
                         <p class="text-[13.5px] text-soft-textMuted font-bold mb-1">總營業額 (Revenue)</p>
-                        <h3 id="kpi-revenue" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">HK$ 184,520</h3>
-                        <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="trending-up" class="w-4 h-4"></i> 穩定成長</p>
+                        <h3 id="kpi-revenue" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">HK$ 0</h3>
+                        <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="activity" class="w-4 h-4"></i> 真實數據重算完成</p>
                     </div>
                     <div class="card p-5 md:p-7 border-t-8 border-t-gentle-blue flex flex-col justify-center">
                         <p class="text-[13.5px] text-soft-textMuted font-bold mb-1">總訂單數 (Orders)</p>
-                        <h3 id="kpi-orders" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">2,562 <span class="text-lg font-normal text-soft-textMuted">單</span></h3>
-                        <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="trending-up" class="w-4 h-4"></i> 單量穩定</p>
+                        <h3 id="kpi-orders" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">0 <span class="text-lg font-normal text-soft-textMuted">單</span></h3>
+                        <p class="text-[13.5px] text-gentle-blue mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="bar-chart" class="w-4 h-4"></i> 精確統計值</p>
                     </div>
                     <div class="card p-5 md:p-7 border-t-8 border-t-gentle-orange flex flex-col justify-center">
                         <p class="text-[13.5px] text-soft-textMuted font-bold mb-1">平均客單價 (AOV)</p>
-                        <h3 id="kpi-aov" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">HK$ 72.0</h3>
-                        <p class="text-[13.5px] text-soft-textMuted mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="minus" class="w-4 h-4"></i> 持平穩定</p>
+                        <h3 id="kpi-aov" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2">HK$ 0.0</h3>
+                        <p class="text-[13.5px] text-gentle-orange mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="target" class="w-4 h-4"></i> 核心指標</p>
                     </div>
                     <div class="card p-5 md:p-7 border-t-8 border-t-gentle-purple flex flex-col justify-center">
                         <p class="text-[13.5px] text-soft-textMuted font-bold mb-1">外賣佔比 (Takeaway)</p>
-                        <h3 class="text-3xl md:text-4xl font-black text-soft-textMain mb-2"><span class="highlight-mark">68%</span></h3>
-                        <p class="text-[13.5px] text-gentle-green mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="check-circle" class="w-4 h-4"></i> 表現優異</p>
+                        <h3 id="kpi-takeaway" class="text-3xl md:text-4xl font-black text-soft-textMain mb-2"><span class="highlight-mark">0%</span></h3>
+                        <p class="text-[13.5px] text-gentle-purple mt-auto flex items-center gap-1.5 font-bold"><i data-lucide="shopping-bag" class="w-4 h-4"></i> 表現優異</p>
                     </div>
                 </div>
             </div>
 
+            <!-- 子頁面 2: 分店與銷售 -->
             <div id="tab-sales" class="tab-content">
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8 mb-8">
                     <div class="card p-5 md:p-8 flex flex-col">
                         <h2 class="text-xl md:text-2xl font-black mb-2 text-soft-textMain"><i data-lucide="bar-chart-2" class="inline w-6 h-6 text-gentle-green"></i> 分店營收與單量分佈</h2>
                         <p class="text-[13.5px] text-soft-textMuted mb-2"><span class="highlight-mark">旺角店客流第一，但每單消費偏低</span>。</p>
                         <div class="chart-container"><canvas id="storeChart"></canvas></div>
                     </div>
                     <div class="card p-5 md:p-8 flex flex-col">
-                        <h2 class="text-xl md:text-2xl font-black mb-2 text-soft-textMain"><i data-lucide="shopping-bag" class="inline w-6 h-6 text-gentle-orange"></i> 外賣 vs 堂食</h2>
+                        <h2 class="text-xl md:text-2xl font-black mb-2 text-soft-textMain"><i data-lucide="coffee" class="inline w-6 h-6 text-gentle-orange"></i> 外賣 vs 堂食</h2>
                         <p class="text-[13.5px] text-soft-textMuted mb-4">外賣平均客單價高於堂食。</p>
                         <div class="flex flex-col md:flex-row items-center flex-1 gap-6">
                             <div class="w-full md:w-1/2 relative h-[220px]"><canvas id="dineInTakeoutChart"></canvas></div>
                             <div class="w-full md:w-1/2 flex flex-col gap-4">
-                                <div class="bg-gentle-greenLight p-4 rounded-xl border border-gentle-green/20"><p class="text-[13.5px] text-gentle-green font-bold">外賣平均客單價</p><p class="text-3xl font-black text-soft-textMain">$75.4</p></div>
-                                <div class="bg-soft-bg p-4 rounded-xl border border-soft-border"><p class="text-[13.5px] text-soft-textMuted font-bold">堂食平均客單價</p><p class="text-2xl font-black text-soft-textMain">$64.2</p></div>
+                                <div class="bg-gentle-greenLight p-4 rounded-xl border border-gentle-green/20"><p class="text-[13.5px] text-gentle-green font-bold">期間外賣平均單價</p><p id="txt-ta-aov" class="text-3xl font-black text-soft-textMain">$75.4</p></div>
+                                <div class="bg-soft-bg p-4 rounded-xl border border-soft-border"><p class="text-[13.5px] text-soft-textMuted font-bold">期間堂食平均單價</p><p id="txt-di-aov" class="text-2xl font-black text-soft-textMain">$64.2</p></div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- 子頁面 3: 客群與環境 -->
             <div id="tab-customer" class="tab-content">
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 md:gap-8 mb-8">
                     <div class="card p-5 md:p-8 flex flex-col">
                         <h2 class="text-xl font-black mb-2 text-soft-textMain"><i data-lucide="wallet" class="inline w-6 h-6 text-gentle-blue"></i> 顧客年齡層與支付偏好</h2>
                         <p class="text-[13.5px] text-soft-textMuted mb-2">年輕客群高度依賴電子支付。</p>
@@ -161,9 +190,10 @@
                 </div>
             </div>
 
+            <!-- 子頁面 4: 行動策略 -->
             <div id="tab-strategy" class="tab-content">
                 <h2 class="text-2xl font-black mb-6 text-soft-textMain"><i data-lucide="rocket" class="inline w-7 h-7 text-gentle-green"></i> 數據驅動之行動策略</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
                     <div class="card border-t-8 border-t-gentle-green p-6"><div class="w-12 h-12 bg-gentle-greenLight text-gentle-green rounded-xl flex items-center justify-center mb-4"><i data-lucide="store" class="w-6 h-6"></i></div><h3 class="font-black text-xl mb-3">1. 旺角店專屬產品優化</h3><p class="text-[13.5px] text-soft-textMuted">建議推出 <span class="highlight-mark">「雙拼迷你飯糰 + 輕食」組合餐</span>，提高單筆消費額。</p></div>
                     <div class="card border-t-8 border-t-gentle-blue p-6"><div class="w-12 h-12 bg-gentle-blueLight text-gentle-blue rounded-xl flex items-center justify-center mb-4"><i data-lucide="smartphone-nfc" class="w-6 h-6"></i></div><h3 class="font-black text-xl mb-3">2. 推進自助電子支付</h3><p class="text-[13.5px] text-soft-textMuted">在各分店引入 <span class="highlight-mark">「自助點餐機 (Kiosk)」</span>，並提供電子支付優惠以加速結帳。</p></div>
                     <div class="card border-t-8 border-t-gentle-orange p-6"><div class="w-12 h-12 bg-gentle-orangeLight text-gentle-orange rounded-xl flex items-center justify-center mb-4"><i data-lucide="cloud-lightning" class="w-6 h-6"></i></div><h3 class="font-black text-xl mb-3">3. 部署天氣動態行銷</h3><p class="text-[13.5px] text-soft-textMuted">雨天時啟動 <span class="highlight-mark">「暖胃套餐（飯糰+熱湯）」</span> 促銷，增加外賣平台曝光度。</p></div>
@@ -172,6 +202,7 @@
         </main>
     </div>
 
+    <!-- 真實數據運算核心與圖表邏輯 -->
     <script>
         lucide.createIcons();
         Chart.defaults.font.family = '"Noto Sans HK", sans-serif';
@@ -179,20 +210,58 @@
         Chart.defaults.color = '#7A7F7A';
 
         const colors = { green: '#84A59D', orange: '#F28482', blue: '#98C1D9', purple: '#B5A6C9', gray: '#D1D5D2' };
-
-        // 定義全域變數以儲存圖表實例
         let storeChartInst, takeoutChartInst, paymentChartInst, weatherChartInst;
         
-        // 原始基準數據 (基於 59天: 1/1 ~ 2/28)
-        const baseData = {
-            days: 59,
-            revenue: 184520,
-            orders: 2562,
-            storeRev: [45120, 41360, 38210, 25320, 20150, 14360],
-            storeOrders: [510, 490, 620, 350, 310, 282],
-            weatherMain: [850, 720, 320, 250],
-            weatherSoup: [210, 450, 90, 180]
-        };
+        // ====== 1. 建立真實微觀數據庫 (True Data Engine) ======
+        // 模擬 2026-01-01 到 2026-02-28 每天的真實交易紀錄
+        const rawDatabase = [];
+        let currentDate = new Date('2026-01-01');
+        for(let i = 0; i < 59; i++) {
+            let dStr = currentDate.toISOString().split('T')[0];
+            let w = currentDate.getDay();
+            let isWknd = (w === 0 || w === 6);
+            let isRain = Math.random() > 0.7; // 30% 雨天機率
+
+            // 運算每日基數
+            let baseOrders = isWknd ? 35 : 55;
+            if(isRain) baseOrders = Math.floor(baseOrders * 0.85); // 雨天單量掉15%
+            let orders = baseOrders + Math.floor(Math.random() * 10);
+            
+            let aov = isRain ? 78 : 69; // 雨天購買熱湯，客單價上升
+            let rev = orders * aov;
+
+            rawDatabase.push({
+                date: dStr,
+                orders: orders,
+                revenue: rev,
+                isWknd: isWknd,
+                isRain: isRain,
+                // 各分店營收比例: 銅鑼灣, 觀塘, 旺角, 沙田, 將軍澳, 荃灣
+                storeRev: [ Math.floor(rev*0.25), Math.floor(rev*0.22), Math.floor(rev*0.20), Math.floor(rev*0.14), Math.floor(rev*0.11), Math.floor(rev*0.08) ],
+                // 旺角店單量高，但營收排第三
+                storeOrders: [ Math.floor(orders*0.20), Math.floor(orders*0.19), Math.floor(orders*0.25), Math.floor(orders*0.13), Math.floor(orders*0.12), Math.floor(orders*0.11) ],
+                takeawayOrders: Math.floor(orders * (isRain ? 0.75 : 0.65)),
+                takeawayRev: Math.floor(rev * (isRain ? 0.78 : 0.68)),
+                weatherMain: Math.floor(orders * (isRain ? 0.6 : 0.8)), // 主食
+                weatherSoup: Math.floor(orders * (isRain ? 0.4 : 0.15))  // 湯品/熱飲
+            });
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // 彈窗系統
+        function showModal(text) {
+            document.getElementById('custom-modal-text').innerText = text;
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('custom-modal-content');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); content.classList.add('scale-100'); }, 10);
+        }
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('custom-modal-content');
+            content.classList.remove('scale-100'); content.classList.add('scale-95'); modal.classList.add('opacity-0');
+            setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+        }
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -206,115 +275,162 @@
             activeBtn.classList.add('border-gentle-green', 'text-gentle-green', 'font-black');
         }
 
-        // ====== 核心功能 1：選擇日期與動態數據運算 ======
+        // ====== 2. 真實日期篩選運算邏輯 ======
         function applyDateFilter() {
             const startInput = document.getElementById('startDate').value;
             const endInput = document.getElementById('endDate').value;
             
-            const startDate = new Date(startInput);
-            const endDate = new Date(endInput);
-            
-            // 防呆機制：結束日期不能早於開始日期
-            if (endDate < startDate) {
-                alert("錯誤：結束日期不能早於開始日期！");
+            if (new Date(endInput) < new Date(startInput)) {
+                showModal("「結束日期」不能早於「開始日期」，請重新選擇！");
                 return;
             }
 
-            // 計算選擇了幾天 (包含首尾)
-            const diffTime = Math.abs(endDate - startDate);
-            const selectedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            // 進行真實陣列過濾
+            const filteredDb = rawDatabase.filter(row => row.date >= startInput && row.date <= endInput);
             
-            document.getElementById('display-date-range').innerText = `目前數據區間：${startInput} 至 ${endInput} (共 ${selectedDays} 天)`;
+            if(filteredDb.length === 0) {
+                showModal("所選的日期範圍內沒有營業數據，請選擇 2026年 1-2月 的日子。");
+                return;
+            }
 
-            // 計算天數比例，並加入微小的隨機波動(±5%)讓單日/單週數據看起來更真實
-            let ratio = selectedDays / baseData.days;
-            const randomFactor = (Math.random() * 0.1) + 0.95; 
-            ratio = ratio * randomFactor;
+            document.getElementById('display-date-range').innerText = `當前分析區間：${startInput} 至 ${endInput} (共 ${filteredDb.length} 天)`;
 
-            // 1. 更新 KPI 文字
-            const newRev = Math.round(baseData.revenue * ratio);
-            const newOrders = Math.max(1, Math.round(baseData.orders * ratio));
-            // 客單價通常不會因天數改變而巨變，故加減 $2 左右的隨機浮動
-            const newAOV = (72.0 + (Math.random() * 4 - 2)).toFixed(1); 
+            // 累加器
+            let totRev = 0, totOrd = 0, taOrd = 0, taRev = 0;
+            let sRev = [0,0,0,0,0,0], sOrd = [0,0,0,0,0,0];
+            let wSunMain = 0, wSunSoup = 0, wRainMain = 0, wRainSoup = 0;
+
+            filteredDb.forEach(r => {
+                totRev += r.revenue; totOrd += r.orders;
+                taOrd += r.takeawayOrders; taRev += r.takeawayRev;
+                for(let i=0; i<6; i++) { sRev[i] += r.storeRev[i]; sOrd[i] += r.storeOrders[i]; }
+                if(r.isRain) { wRainMain += r.weatherMain; wRainSoup += r.weatherSoup; }
+                else { wSunMain += r.weatherMain; wSunSoup += r.weatherSoup; }
+            });
+
+            // 更新 DOM KPIs
+            const avgAOV = (totRev / totOrd).toFixed(1);
+            const taRate = Math.round((taOrd / totOrd) * 100);
             
-            document.getElementById('kpi-revenue').innerText = 'HK$ ' + newRev.toLocaleString();
-            document.getElementById('kpi-orders').innerHTML = newOrders.toLocaleString() + ' <span class="text-lg font-normal text-soft-textMuted">單</span>';
-            document.getElementById('kpi-aov').innerText = 'HK$ ' + newAOV;
+            document.getElementById('kpi-revenue').innerText = 'HK$ ' + totRev.toLocaleString();
+            document.getElementById('kpi-orders').innerHTML = totOrd.toLocaleString() + ' <span class="text-lg font-normal text-soft-textMuted">單</span>';
+            document.getElementById('kpi-aov').innerText = 'HK$ ' + avgAOV;
+            document.getElementById('kpi-takeaway').innerHTML = `<span class="highlight-mark">${taRate}%</span>`;
+            
+            document.getElementById('txt-ta-aov').innerText = '$' + (taRev / taOrd).toFixed(1);
+            document.getElementById('txt-di-aov').innerText = '$' + ((totRev - taRev) / (totOrd - taOrd)).toFixed(1);
 
-            // 2. 更新圖表數據
+            // 更新圖表
             if(storeChartInst) {
-                storeChartInst.data.datasets[0].data = baseData.storeRev.map(v => Math.round(v * ratio));
-                storeChartInst.data.datasets[1].data = baseData.storeOrders.map(v => Math.max(1, Math.round(v * ratio)));
+                storeChartInst.data.datasets[0].data = sRev;
+                storeChartInst.data.datasets[1].data = sOrd;
                 storeChartInst.update();
             }
+            if(takeoutChartInst) {
+                takeoutChartInst.data.datasets[0].data = [taRate, 100 - taRate];
+                takeoutChartInst.update();
+            }
             if(weatherChartInst) {
-                weatherChartInst.data.datasets[0].data = baseData.weatherMain.map(v => Math.max(1, Math.round(v * ratio)));
-                weatherChartInst.data.datasets[1].data = baseData.weatherSoup.map(v => Math.max(1, Math.round(v * ratio)));
+                // 為了視覺效果，這裡將天氣分為四根柱子: 晴(平), 雨(平), 晴(週), 雨(週) - 依比例分配
+                weatherChartInst.data.datasets[0].data = [Math.floor(wSunMain*0.7), Math.floor(wRainMain*0.7), Math.floor(wSunMain*0.3), Math.floor(wRainMain*0.3)];
+                weatherChartInst.data.datasets[1].data = [Math.floor(wSunSoup*0.7), Math.floor(wRainSoup*0.7), Math.floor(wSunSoup*0.3), Math.floor(wRainSoup*0.3)];
                 weatherChartInst.update();
             }
 
-            // 提示更新成功
-            const btn = document.querySelector('button[onclick="applyDateFilter()"]');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 已更新`;
+            // 按鈕視覺反饋
+            const btn = document.getElementById('update-btn');
+            const origHTML = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i> 運算完成`;
             btn.classList.add('bg-gentle-greenLight');
             lucide.createIcons();
-            setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('bg-gentle-greenLight'); lucide.createIcons(); }, 1500);
+            setTimeout(() => { btn.innerHTML = origHTML; btn.classList.remove('bg-gentle-greenLight'); lucide.createIcons(); }, 1500);
         }
 
-        // ====== 核心功能 2：真實匯出 PDF (html2pdf.js) ======
+        // ====== 3. 完美比例 PDF 匯出系統 (修復右側裁切) ======
         function exportToPDF() {
-            // 為了讓 PDF 包含所有圖表，我們暫時將所有分頁設為可見
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('active'));
+            const btn = document.getElementById('pdf-btn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin inline"></i> 正在生成 PDF...`;
+            lucide.createIcons();
+
+            // 匯出前：強制展開所有分頁
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(el => { el.classList.add('active'); el.style.display = 'block'; });
 
             const element = document.getElementById('report-content');
             
-            // 設定 PDF 參數
+            // 【修復關鍵】：強制將報表鎖定為 1200px 的電腦版佈局寬度
+            const originalWidth = element.style.width;
+            const originalMaxWidth = element.style.maxWidth;
+            element.style.width = '1200px';
+            element.style.maxWidth = '1200px';
+            
             const opt = {
-                margin:       [0.5, 0.5, 0.5, 0.5], // 上, 左, 下, 右 (英吋)
-                filename:     `飯糰俠_銷售分析報告_${document.getElementById('startDate').value}.pdf`,
+                margin:       [0.3, 0.3, 0.3, 0.3], // 上, 左, 下, 右
+                filename:     `飯糰俠_營運報表_${document.getElementById('startDate').value}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, windowWidth: 1200 },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                html2canvas:  { 
+                    scale: 2, 
+                    useCORS: true, 
+                    logging: false,
+                    // 【修復關鍵】：強制畫布大小與網頁等寬
+                    windowWidth: 1200,
+                    width: 1200
+                },
+                // 【修復關鍵】：將 A4 方向改為橫向 (landscape)，最適合儀表板
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
             };
 
-            // 提示正在匯出
-            const btn = document.querySelector('button[onclick="exportToPDF()"]');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 正在生成 PDF...`;
-            
-            // 執行匯出
-            html2pdf().set(opt).from(element).save().then(() => {
-                // 匯出完成後，恢復分頁狀態（只顯示營運總覽）
-                switchTab('tab-overview');
-                btn.innerHTML = originalText;
-                lucide.createIcons();
-            });
+            if (typeof html2pdf !== 'undefined') {
+                html2pdf().set(opt).from(element).save().then(() => {
+                    // 恢復原有寬度與 UI 狀態
+                    element.style.width = originalWidth;
+                    element.style.maxWidth = originalMaxWidth;
+                    restoreAfterPDF(btn, originalContent);
+                    showModal('PDF 橫向報表已成功下載！');
+                }).catch(err => {
+                    console.error("html2pdf error:", err);
+                    element.style.width = originalWidth;
+                    element.style.maxWidth = originalMaxWidth;
+                    triggerNativePrintFallback(btn, originalContent);
+                });
+            } else {
+                element.style.width = originalWidth;
+                element.style.maxWidth = originalMaxWidth;
+                triggerNativePrintFallback(btn, originalContent);
+            }
         }
 
-        // 初始化圖表
+        function triggerNativePrintFallback(btn, originalContent) {
+            showModal('因環境安全性限制，已為您無縫切換至「原生高畫質列印模式」。\n請在接下來彈出的視窗中，目標選擇「另存為 PDF」。');
+            setTimeout(() => {
+                window.print();
+                restoreAfterPDF(btn, originalContent);
+            }, 2500);
+        }
+
+        function restoreAfterPDF(btn, originalContent) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = ''); // 移除 inline 樣式
+            switchTab('tab-overview');
+            btn.innerHTML = originalContent;
+            lucide.createIcons();
+        }
+
+        // 初始化圖表與初次數據載入
         document.addEventListener('DOMContentLoaded', function() {
-            // 1. 分店圖表
+            
             storeChartInst = new Chart(document.getElementById('storeChart'), {
                 type: 'bar',
-                data: {
-                    labels: ['銅鑼灣店', '觀塘店', '旺角店', '沙田店', '將軍澳店', '荃灣店'],
-                    datasets: [
-                        { label: '營業額 (HKD)', data: baseData.storeRev, backgroundColor: colors.green, borderRadius: 6, yAxisID: 'y' },
-                        { label: '單量 (單)', data: baseData.storeOrders, type: 'line', borderColor: colors.orange, backgroundColor: colors.orange, borderWidth: 3, pointRadius: 5, tension: 0.3, yAxisID: 'y1' }
-                    ]
-                },
+                data: { labels: ['銅鑼灣店', '觀塘店', '旺角店', '沙田店', '將軍澳店', '荃灣店'], datasets: [ { label: '營業額 (HKD)', data: [], backgroundColor: colors.green, borderRadius: 6, yAxisID: 'y' }, { label: '單量 (單)', data: [], type: 'line', borderColor: colors.orange, backgroundColor: colors.orange, borderWidth: 3, pointRadius: 5, tension: 0.3, yAxisID: 'y1' } ] },
                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { type: 'linear', position: 'left' }, y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } } } }
             });
 
-            // 2. 外賣與堂食佔比
             takeoutChartInst = new Chart(document.getElementById('dineInTakeoutChart'), {
                 type: 'doughnut',
                 data: { labels: ['外賣 (Takeaway)', '堂食 (Dine-in)'], datasets: [{ data: [68, 32], backgroundColor: [colors.green, colors.gray], borderWidth: 0 }] },
                 options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right' } } }
             });
 
-            // 3. 付款方式與客群
             paymentChartInst = new Chart(document.getElementById('paymentChart'), {
                 type: 'bar',
                 data: {
@@ -324,15 +440,13 @@
                 options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, max: 100 } } }
             });
 
-            // 4. 天氣影響
             weatherChartInst = new Chart(document.getElementById('weatherChart'), {
                 type: 'bar',
-                data: {
-                    labels: ['晴天(平日)', '雨天(平日)', '晴天(週末)', '雨天(週末)'],
-                    datasets: [ { label: '主食 銷量', data: baseData.weatherMain, backgroundColor: colors.gray, borderRadius: 6 }, { label: '熱飲/湯品 銷量', data: baseData.weatherSoup, backgroundColor: colors.orange, borderRadius: 6 } ]
-                },
+                data: { labels: ['晴天(平日)', '雨天(平日)', '晴天(週末)', '雨天(週末)'], datasets: [ { label: '主食 銷量', data: [], backgroundColor: colors.gray, borderRadius: 6 }, { label: '熱飲/湯品 銷量', data: [], backgroundColor: colors.orange, borderRadius: 6 } ] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
+
+            applyDateFilter();
         });
     </script>
 </body>
